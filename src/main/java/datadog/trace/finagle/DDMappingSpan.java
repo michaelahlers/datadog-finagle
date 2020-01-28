@@ -1,4 +1,4 @@
-package io.smartup.zipkin;
+package datadog.trace.finagle;
 
 import com.fasterxml.jackson.annotation.JsonGetter;
 import com.fasterxml.jackson.annotation.JsonInclude;

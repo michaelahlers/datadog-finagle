@@ -1,4 +1,4 @@
-package io.smartup.zipkin;
+package datadog.trace.finagle;
 
 import zipkin2.Span;
 import zipkin2.reporter.Reporter;
