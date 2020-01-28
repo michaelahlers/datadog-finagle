@@ -98,9 +98,7 @@ class DDApi {
      * @return the staus code returned
      */
     void sendTraces(final List<List<DDMappingSpan>> traces) {
-        if (log.isTraceEnabled()) {
-            log.trace("Sending traces {}", traces);
-        }
+        log.info("Sending traces {}", traces);
         final int totalSize = traces.size();
         try {
             final HttpURLConnection httpCon = getHttpURLConnection(tracesEndpoint);
@@ -131,14 +129,16 @@ class DDApi {
             final int responseCode = httpCon.getResponseCode();
             if (responseCode != 200) {
                 if (log.isTraceEnabled()) {
-                    log.trace("Error while sending {} of {} traces to the DD agent. Status: {}, ResponseMessage: ",
+                    log.trace(
+                            "Error while sending {} of {} traces to the DD agent. Status: {}, ResponseMessage: ",
                             traces.size(),
                             totalSize,
                             responseCode,
                             httpCon.getResponseMessage());
                 } else if (nextAllowedLogTime < System.currentTimeMillis()) {
                     nextAllowedLogTime = System.currentTimeMillis() + MILLISECONDS_BETWEEN_ERROR_LOG;
-                    log.warn("Error while sending {} of {} traces to the DD agent. Status: {} (going silent for {} seconds)",
+                    log.warn(
+                            "Error while sending {} of {} traces to the DD agent. Status: {} (going silent for {} seconds)",
                             traces.size(),
                             totalSize,
                             responseCode,
@@ -162,39 +162,47 @@ class DDApi {
 
         } catch (final IOException e) {
             if (log.isWarnEnabled()) {
-                log.trace("Error while sending {} of {} traces to the DD agent.", traces.size(), totalSize, e);
+                log.trace(
+                        "Error while sending {} of {} traces to the DD agent.", traces.size(), totalSize, e);
             } else if (nextAllowedLogTime < System.currentTimeMillis()) {
                 nextAllowedLogTime = System.currentTimeMillis() + MILLISECONDS_BETWEEN_ERROR_LOG;
-                log.warn("Error while sending {} of {} traces to the DD agent. {}: {} (going silent for {} minutes)",
-                                traces.size(),
-                                totalSize,
-                                e.getClass().getName(),
-                                e.getMessage(),
-                                TimeUnit.MILLISECONDS.toMinutes(MILLISECONDS_BETWEEN_ERROR_LOG));
+                log.warn(
+                        "Error while sending {} of {} traces to the DD agent. {}: {} (going silent for {} minutes)",
+                        traces.size(),
+                        totalSize,
+                        e.getClass().getName(),
+                        e.getMessage(),
+                        TimeUnit.MILLISECONDS.toMinutes(MILLISECONDS_BETWEEN_ERROR_LOG));
             }
         }
     }
 
     /* Ensure we read the full response. Borrowed from https://github.com/openzipkin/zipkin-reporter-java/blob/2eb169e/urlconnection/src/main/java/zipkin2/reporter/urlconnection/URLConnectionSender.java#L231-L252 */
-    private void skipAllContent(HttpURLConnection connection) throws IOException {
-        InputStream in = connection.getInputStream();
-        IOException thrown = skipAndSuppress(in);
-        if (thrown == null) return;
-        InputStream err = connection.getErrorStream();
-        if (err != null) skipAndSuppress(err); // null is possible, if the connection was dropped
+    private void skipAllContent(final HttpURLConnection connection) throws IOException {
+        final InputStream in = connection.getInputStream();
+        final IOException thrown = skipAndSuppress(in);
+        if (thrown == null) {
+            return;
+        }
+        final InputStream err = connection.getErrorStream();
+        if (err != null) {
+            skipAndSuppress(err); // null is possible, if the connection was dropped
+        }
         throw thrown;
     }
 
-    private IOException skipAndSuppress(InputStream in) {
+    private IOException skipAndSuppress(final InputStream in) {
         try {
-            while (in.read() != -1) ; // skip
+            while (in.read() != -1) {
+                // skip
+            }
             return null;
-        } catch (IOException e) {
+        } catch (final IOException e) {
             return e;
         } finally {
             try {
                 in.close();
-            } catch (IOException suppressed) {
+            } catch (final IOException suppressed) {
             }
         }
     }

@@ -1,5 +1,8 @@
 package datadog.trace.finagle;
 
+import java.math.BigInteger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import zipkin2.Span;
 import zipkin2.reporter.Reporter;
 
@@ -25,18 +28,15 @@ public class DatadogReporter implements Reporter<Span>, Flushable, Closeable {
     public static final long COMPLETION_DELAY = TimeUnit.SECONDS.toNanos(1);
     public static final long FLUSH_DELAY = TimeUnit.SECONDS.toMillis(1);
 
-    private final Queue<List<DDMappingSpan>> reportingTraces;
     private final Map<String, PendingTrace> pendingTraces = new ConcurrentHashMap<>();
 
-    private final AtomicBoolean running = new AtomicBoolean(false);
+    private final AtomicBoolean running = new AtomicBoolean(true);
     private final DDApi ddApi;
-    private volatile Thread flushingThread;
+    private final Thread flushingThread;
 
-    /**
-     * Report traces to the Datadog Agent at the default location (localhost:8126).
-     */
+    /** Report traces to the Datadog Agent at the default location (localhost:8126). */
     public DatadogReporter() {
-        this(DDApi.DEFAULT_HOSTNAME, DDApi.DEFAULT_PORT, new LinkedBlockingQueue<>());
+        this(DDApi.DEFAULT_HOSTNAME, DDApi.DEFAULT_PORT);
     }
 
     /**
@@ -45,43 +45,20 @@ public class DatadogReporter implements Reporter<Span>, Flushable, Closeable {
      * @param host (See DDApi.DEFAULT_HOSTNAME)
      * @param port (See DDApi.DEFAULT_PORT)
      */
-    public DatadogReporter(String host, int port) {
-        this(host, port, new LinkedBlockingQueue<>());
-    }
-
-    /**
-     * Intended for testing. Doesn't actually report to the agent.
-     *
-     * @param reportedTraces - queue where traces will be sent to.
-     */
-    public DatadogReporter(Queue<List<DDMappingSpan>> reportedTraces) {
-        this.reportingTraces = reportedTraces;
-        ddApi = null;
-    }
-
-    private DatadogReporter(String host, int port, Queue<List<DDMappingSpan>> reportingTraces) {
-        this.reportingTraces = reportingTraces;
+    public DatadogReporter(final String host, final int port) {
         ddApi = new DDApi(host, port);
+
+        flushingThread = new Thread(this::flushPeriodically, "zipkin-datadog-flusher");
+        flushingThread.setDaemon(true);
+        flushingThread.start();
     }
 
     @Override
-    public void report(Span span) {
-        if (flushingThread == null) {
-            synchronized (this) {
-                if (flushingThread == null) {
-                    running.set(true);
-                    flushingThread = new Thread(() -> flushPeriodically(), "zipkin-datadog-flusher");
-                    flushingThread.setDaemon(true);
-                    flushingThread.start();
-                }
-            }
-        }
+    public void report(final Span span) {
+        final PendingTrace trace =
+                pendingTraces.computeIfAbsent(span.traceId(), (id) -> new PendingTrace());
 
-        PendingTrace trace = new PendingTrace();
-        PendingTrace previousTrace = pendingTraces.putIfAbsent(span.traceId(), trace);
-        trace = previousTrace != null ? previousTrace : trace; // Handles race condition
-
-        trace.spans.add(new DDMappingSpan(span));
+        trace.addSpan(span);
 
         /* If the span kind is server or consumer, we assume it is the root of the trace.
          * That implies all span children have likely already been reported and can be
@@ -98,31 +75,24 @@ public class DatadogReporter implements Reporter<Span>, Flushable, Closeable {
 
     @Override
     public void flush() {
-        long currentTime = nanoTime();
-        Iterator<Map.Entry<String, PendingTrace>> iterator = pendingTraces.entrySet().iterator();
+        final long currentTime = nanoTime();
+        final Iterator<Map.Entry<String, PendingTrace>> iterator = pendingTraces.entrySet().iterator();
+
+        final List<List<DDMappingSpan>> reportingTraces = new ArrayList<>();
+
         while (iterator.hasNext()) {
-            Map.Entry<String, PendingTrace> next = iterator.next();
+            final Map.Entry<String, PendingTrace> next = iterator.next();
             if (currentTime > next.getValue().expiration) {
-                reportingTraces.add(next.getValue().spans);
                 iterator.remove();
+
+                if (!next.getValue().spans.isEmpty()) {
+                    reportingTraces.add(next.getValue().spans);
+                }
             }
         }
         if (!reportingTraces.isEmpty()) {
-            sendTraces();
+            ddApi.sendTraces(reportingTraces);
         }
-    }
-
-    private void sendTraces() {
-        if (ddApi == null) {
-            return;
-        }
-        List<List<DDMappingSpan>> traces = new ArrayList<>(reportingTraces.size());
-        List<DDMappingSpan> trace = reportingTraces.poll();
-        while (trace != null) {
-            traces.add(trace);
-            trace = reportingTraces.poll();
-        }
-        ddApi.sendTraces(traces);
     }
 
     private void flushPeriodically() {
@@ -130,33 +100,57 @@ public class DatadogReporter implements Reporter<Span>, Flushable, Closeable {
             try {
                 flush();
                 Thread.sleep(FLUSH_DELAY);
-            } catch (InterruptedException e) {
+            } catch (final InterruptedException e) {
             }
         }
     }
 
     @Override
     public void close() {
-        if (flushingThread == null) {
-            return;
-        }
-
         running.set(false);
 
         flushingThread.interrupt();
         try {
             flushingThread.join();
-            flushingThread = null;
-        } catch (InterruptedException e) {
+        } catch (final InterruptedException e) {
         }
     }
 
-    protected long nanoTime() {
+    protected static long nanoTime() {
         return System.nanoTime();
     }
 
-    private class PendingTrace {
-        public final List<DDMappingSpan> spans = new CopyOnWriteArrayList<>();
+    private static class PendingTrace {
+        private static final Logger log = LoggerFactory.getLogger(PendingTrace.class);
+
+        // Zipkin uses the same span id for client<->server spans
+        // This mapping overwrites that
+        private final Map<String, BigInteger> spanMapping = new ConcurrentHashMap<>();
+
+        private final List<DDMappingSpan> spans = new CopyOnWriteArrayList<>();
         public volatile long expiration = nanoTime() + TIMEOUT_DELAY;
+
+        public void addSpan(final Span span) {
+            // skip "flush" spans
+            if ("unknown".equals(span.name()) && span.durationAsLong() == 0L) {
+                return;
+            }
+
+            if (Span.Kind.SERVER.equals(span.kind()) && span.parentId() != null) {
+                spanMapping.put(span.id(), generateSpanId());
+            }
+            final DDMappingSpan ddMappingSpan = new DDMappingSpan(span, spanMapping);
+
+            spans.add(ddMappingSpan);
+        }
+
+        private BigInteger generateSpanId() {
+            BigInteger value;
+            do {
+                value = new BigInteger(63, ThreadLocalRandom.current());
+            } while (value.signum() == 0);
+
+            return value;
+        }
     }
 }

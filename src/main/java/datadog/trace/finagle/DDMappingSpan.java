@@ -3,54 +3,42 @@ package datadog.trace.finagle;
 import com.fasterxml.jackson.annotation.JsonGetter;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import java.math.BigInteger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import zipkin2.Span;
 
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 public class DDMappingSpan {
+    private static final Logger log = LoggerFactory.getLogger(DDMappingSpan.class);
 
+    private final Map<String, BigInteger> spanMapping;
     private final Span delegateSpan;
 
-    DDMappingSpan(Span delegateSpan) {
+    DDMappingSpan(final Span delegateSpan, final Map<String, BigInteger> spanMapping) {
         this.delegateSpan = delegateSpan;
+        this.spanMapping = spanMapping;
     }
 
     /**
      * Parses a 1 to 32 character lower-hex string with no prefix into an unsigned long, tossing any
      * bits higher than 64.
      */
-    public static long lowerHexToUnsignedLong(String lowerHex) {
-        int length = lowerHex.length();
-        if (length < 1 || length > 32) throw isntLowerHexLong(lowerHex);
+    public static BigInteger lowerHexToUnsignedLong(final String lowerHex) {
+        final int length = lowerHex.length();
+        if (length < 1 || length > 32) {
+            throw isntLowerHexLong(lowerHex);
+        }
 
         // trim off any high bits
-        int beginIndex = length > 16 ? length - 16 : 0;
+        final int beginIndex = length > 16 ? length - 16 : 0;
 
-        return lowerHexToUnsignedLong(lowerHex, beginIndex);
+        return new BigInteger(lowerHex.substring(beginIndex), 16);
     }
 
-    /**
-     * Parses a 16 character lower-hex string with no prefix into an unsigned long, starting at the
-     * spe index.
-     */
-    public static long lowerHexToUnsignedLong(String lowerHex, int index) {
-        long result = 0;
-        for (int endIndex = Math.min(index + 16, lowerHex.length()); index < endIndex; index++) {
-            char c = lowerHex.charAt(index);
-            result <<= 4;
-            if (c >= '0' && c <= '9') {
-                result |= c - '0';
-            } else if (c >= 'a' && c <= 'f') {
-                result |= c - 'a' + 10;
-            } else {
-                throw isntLowerHexLong(lowerHex);
-            }
-        }
-        return result;
-    }
-
-    static NumberFormatException isntLowerHexLong(String lowerHex) {
+    static NumberFormatException isntLowerHexLong(final String lowerHex) {
         throw new NumberFormatException(
                 lowerHex + " should be a 1 to 32 character lower-hex string with no prefix");
     }
@@ -62,49 +50,63 @@ public class DDMappingSpan {
 
     @JsonGetter("duration")
     public long getDurationNano() {
-        long duration = TimeUnit.MICROSECONDS.toNanos(delegateSpan.durationAsLong());
+        final long duration = TimeUnit.MICROSECONDS.toNanos(delegateSpan.durationAsLong());
 
         return duration == 0 ? 1 : duration;
     }
 
     @JsonGetter("service")
     public String getServiceName() {
-      Map<String, String> tags = delegateSpan.tags();
-      if (tags.containsKey("redis.args")) {
-        return "redis";
-      }
+        final Map<String, String> tags = delegateSpan.tags();
+        if (tags.containsKey("redis.args")) {
+            return "redis";
+        }
 
-      if (tags.containsKey("sql.query")) {
-        return "sql";
-      }
+        if (tags.containsKey("sql.query")) {
+            return "sql";
+        }
 
-      return delegateSpan.localServiceName();
+        return delegateSpan.localServiceName();
     }
 
     /**
-     * This method only returns the lower 64 bits of the trace id, so that is all that will be sent to Datadog.
+     * This method only returns the lower 64 bits of the trace id, so that is all that will be sent to
+     * Datadog.
      *
      * @return
      */
     @JsonGetter("trace_id")
-    public long getTraceId() {
+    public BigInteger getTraceId() {
         return lowerHexToUnsignedLong(delegateSpan.traceId());
     }
 
     /**
-     * This method only returns the lower 64 bits of the span id, so that is all that will be sent to Datadog.
+     * This method only returns the lower 64 bits of the span id, so that is all that will be sent to
+     * Datadog.
      *
      * @return
      */
     @JsonGetter("span_id")
-    public long getSpanId() {
+    public BigInteger getSpanId() {
+        final BigInteger replacedId = spanMapping.get(delegateSpan.id());
+        if (replacedId != null) {
+            log.info("Found mapping {} - {}", delegateSpan, replacedId);
+            return replacedId;
+        }
+
         return lowerHexToUnsignedLong(delegateSpan.id());
     }
 
     @JsonGetter("parent_id")
-    public long getParentId() {
+    public BigInteger getParentId() {
         if (delegateSpan.parentId() == null) {
-            return 0;
+            return BigInteger.ZERO;
+        }
+
+        // If the span id was remapped, the span id is actually the parent
+        final BigInteger replacedId = spanMapping.get(delegateSpan.id());
+        if (replacedId != null) {
+            return lowerHexToUnsignedLong(delegateSpan.id());
         } else {
             return lowerHexToUnsignedLong(delegateSpan.parentId());
         }
@@ -112,7 +114,7 @@ public class DDMappingSpan {
 
     @JsonGetter("resource")
     public String getResourceName() {
-        Map<String, String> tags = delegateSpan.tags();
+        final Map<String, String> tags = delegateSpan.tags();
         if (tags.containsKey("sql.query")) {
             return tags.get("sql.query");
         }
@@ -124,46 +126,46 @@ public class DDMappingSpan {
             return tags.get("db.statement");
         }
         if (tags.containsKey("redis.args")) {
-          return delegateSpan.name() + " " + tags.get("redis.args");
+            return delegateSpan.name() + " " + tags.get("redis.args");
         }
         if (tags.containsKey("http.method")) {
-          return tags.get("http.method") + " " + tags.get("http.path");
+            return tags.get("http.method") + " " + tags.get("http.path");
         }
         if (tags.containsKey("channel")) {
-          return tags.get("channel");
+            return tags.get("channel");
         }
         return delegateSpan.name();
     }
 
     @JsonGetter("name")
     public String getOperationName() {
-      Map<String, String> tags = delegateSpan.tags();
-      if (tags.containsKey("sql.query")) {
-          return "sql.query";
+        final Map<String, String> tags = delegateSpan.tags();
+        if (tags.containsKey("sql.query")) {
+            return "sql.query";
         }
         if (tags.containsKey("cassandra.query")) {
-          return "cassandra.query";
+            return "cassandra.query";
         }
         if (tags.containsKey("db.statement")) {
-          // Using Opentracing?
-          return tags.get("db.statement");
+            // Using Opentracing?
+            return tags.get("db.statement");
         }
         if (tags.containsKey("redis.args")) {
-          return "redis.query";
+            return "redis.query";
         }
         if (tags.containsKey("http.method")) {
-          if (delegateSpan.kind().equals(Span.Kind.SERVER)) {
-            return "servlet.request";
-          } else if (delegateSpan.kind().equals(Span.Kind.CLIENT)) {
-            return "http.request";
-          }
+            if (delegateSpan.kind().equals(Span.Kind.SERVER)) {
+                return "servlet.request";
+            } else if (delegateSpan.kind().equals(Span.Kind.CLIENT)) {
+                return "http.request";
+            }
         }
         if (tags.containsKey("channel")) {
-          if (delegateSpan.kind().equals(Span.Kind.CONSUMER)) {
-            return "channel.receive";
-          } else if (delegateSpan.kind().equals(Span.Kind.PRODUCER)){
-            return "channel.send";
-          }
+            if (delegateSpan.kind().equals(Span.Kind.CONSUMER)) {
+                return "channel.receive";
+            } else if (delegateSpan.kind().equals(Span.Kind.PRODUCER)) {
+                return "channel.send";
+            }
         }
         // DataDog does not support trace names without alphanumerical characters
         return delegateSpan.name();
@@ -202,7 +204,7 @@ public class DDMappingSpan {
                     return "http";
                 }
                 if (delegateSpan.tags().containsKey("redis.args")) {
-                  return "redis";
+                    return "redis";
                 }
                 break;
             case SERVER:
@@ -221,18 +223,32 @@ public class DDMappingSpan {
 
     @Override
     public String toString() {
-        return "DDMappingSpan={" +
-          "startTime=" + getStartTime() +
-          ", durationNano=" + getDurationNano() +
-          ", serviceName=" + getServiceName() +
-          ", traceId=" + getTraceId() +
-          ", spanId=" + getSpanId() +
-          ", parentId=" + getParentId() +
-          ", resourceName='" + getResourceName() + "\'" +
-          ", operationName='" + getOperationName() + "\'" +
-          ", samplingPriority=" + getSamplingPriority() +
-          ", meta=" + getMeta() +
-          ", type=" + getType() +
-          ", delegateSpan=" + delegateSpan.toString();
+        return "DDMappingSpan={"
+                + "startTime="
+                + getStartTime()
+                + ", durationNano="
+                + getDurationNano()
+                + ", serviceName="
+                + getServiceName()
+                + ", traceId="
+                + getTraceId()
+                + ", spanId="
+                + getSpanId()
+                + ", parentId="
+                + getParentId()
+                + ", resourceName='"
+                + getResourceName()
+                + "\'"
+                + ", operationName='"
+                + getOperationName()
+                + "\'"
+                + ", samplingPriority="
+                + getSamplingPriority()
+                + ", meta="
+                + getMeta()
+                + ", type="
+                + getType()
+                + ", delegateSpan="
+                + delegateSpan.toString();
     }
 }
