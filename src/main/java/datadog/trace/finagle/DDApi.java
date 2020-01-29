@@ -98,7 +98,7 @@ class DDApi {
      * @return the staus code returned
      */
     void sendTraces(final List<List<DDMappingSpan>> traces) {
-        log.info("Sending traces {}", traces);
+        log.debug("Sending traces {}", traces);
         final int totalSize = traces.size();
         try {
             final HttpURLConnection httpCon = getHttpURLConnection(tracesEndpoint);
