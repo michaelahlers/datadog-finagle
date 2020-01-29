@@ -24,3 +24,4 @@ nbdist/
 .DS_Store
 .java-version
 release.properties
+*.releaseBackup
