@@ -4,8 +4,11 @@ import com.fasterxml.jackson.annotation.JsonGetter;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import java.math.BigInteger;
+import java.util.HashMap;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import zipkin2.Endpoint;
 import zipkin2.Span;
 
 import java.util.Map;
@@ -128,9 +131,15 @@ public class DDMappingSpan {
         if (tags.containsKey("redis.args")) {
             return delegateSpan.name() + " " + tags.get("redis.args");
         }
-        if (tags.containsKey("http.method")) {
-            return tags.get("http.method") + " " + tags.get("http.path");
+        if (tags.containsKey("http.uri") || tags.containsKey("http.path")) {
+            String path = tags.get("http.uri") == null ? tags.get("http.path") : tags.get("http.uri");
+            path = path == null ? "" : path.trim();
+
+            String normalizedPath = normalizePath(rawPathFromUrlString(path));
+
+            return delegateSpan.name().toUpperCase() + " " + normalizedPath;
         }
+
         if (tags.containsKey("channel")) {
             return tags.get("channel");
         }
@@ -153,11 +162,11 @@ public class DDMappingSpan {
         if (tags.containsKey("redis.args")) {
             return "redis.query";
         }
-        if (tags.containsKey("http.method")) {
+        if (tags.containsKey("http.uri") || tags.containsKey("http.path")) {
             if (delegateSpan.kind().equals(Span.Kind.SERVER)) {
-                return "servlet.request";
+                return "server.request";
             } else if (delegateSpan.kind().equals(Span.Kind.CLIENT)) {
-                return "http.request";
+                return "client.request";
             }
         }
         if (tags.containsKey("channel")) {
@@ -179,7 +188,29 @@ public class DDMappingSpan {
 
     @JsonGetter
     public Map<String, String> getMeta() {
-        return delegateSpan.tags();
+        Map<String, String> tagMap = new HashMap<>(delegateSpan.tags());
+
+        Endpoint remoteEndpoint = delegateSpan.remoteEndpoint();
+        if (remoteEndpoint != null) {
+            if (remoteEndpoint.port() != null) {
+                tagMap.put("peer.port", remoteEndpoint.port().toString());
+            }
+
+            if (remoteEndpoint.ipv4() != null) {
+                tagMap.put("peer.ipv4", remoteEndpoint.ipv4());
+            }
+
+            if (remoteEndpoint.ipv6() != null) {
+                tagMap.put("peer.ipv6", remoteEndpoint.ipv6());
+            }
+        }
+
+        if (tagMap.containsKey("http.uri")) {
+            tagMap.put("http.method", delegateSpan.name().toUpperCase());
+        }
+
+
+        return tagMap;
     }
 
     @JsonGetter
@@ -219,6 +250,62 @@ public class DDMappingSpan {
     @JsonGetter
     public int getError() {
         return delegateSpan.tags().containsKey("error") ? 1 : 0;
+    }
+
+    // Copied from datadog.opentracing.decorators.URLAsResourceName
+    // Matches any path segments with numbers in them. (exception for versioning: "/v1/")
+    public static final Pattern PATH_MIXED_ALPHANUMERICS =
+            Pattern.compile("(?<=/)(?![vV]\\d{1,2}/)(?:[^\\/\\d\\?]*[\\d]+[^\\/\\?]*)");
+
+    private static String rawPathFromUrlString(final String url) {
+        // Get the path without host:port
+        // url may already be just the path.
+
+        if (url.isEmpty()) {
+            return "/";
+        }
+
+        final int queryLoc = url.indexOf("?");
+        final int fragmentLoc = url.indexOf("#");
+        final int endLoc;
+        if (queryLoc < 0) {
+            if (fragmentLoc < 0) {
+                endLoc = url.length();
+            } else {
+                endLoc = fragmentLoc;
+            }
+        } else {
+            if (fragmentLoc < 0) {
+                endLoc = queryLoc;
+            } else {
+                endLoc = Math.min(queryLoc, fragmentLoc);
+            }
+        }
+
+        final int protoLoc = url.indexOf("://");
+        if (protoLoc < 0) {
+            return url.substring(0, endLoc);
+        }
+
+        final int pathLoc = url.indexOf("/", protoLoc + 3);
+        if (pathLoc < 0) {
+            return "/";
+        }
+
+        if (queryLoc < 0) {
+            return url.substring(pathLoc);
+        } else {
+            return url.substring(pathLoc, endLoc);
+        }
+    }
+
+    // Method to normalise the url string
+    private static String normalizePath(final String path) {
+        if (path.isEmpty() || path.equals("/")) {
+            return "/";
+        }
+
+        return PATH_MIXED_ALPHANUMERICS.matcher(path).replaceAll("?");
     }
 
     @Override
