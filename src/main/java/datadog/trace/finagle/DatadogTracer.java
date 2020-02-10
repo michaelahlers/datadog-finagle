@@ -14,10 +14,14 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import scala.Option;
 
 @AutoService(Tracer.class)
 public class DatadogTracer implements Tracer, Closeable {
+  private static final Logger log = LoggerFactory.getLogger(DatadogTracer.class);
+
   public static final long FLUSH_PERIOD = TimeUnit.SECONDS.toMillis(1);
 
   private final Map<SpanId, PendingTrace> traces = new ConcurrentHashMap<>();
@@ -48,6 +52,7 @@ public class DatadogTracer implements Tracer, Closeable {
 
   @Override
   public void record(Record record) {
+    log.info("Got record {}", record);
     PendingTrace pendingTrace =
         traces.computeIfAbsent(record.traceId().traceId(), (key) -> new PendingTrace(serviceName));
     pendingTrace.addRecord(record);
