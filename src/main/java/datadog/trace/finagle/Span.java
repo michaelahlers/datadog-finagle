@@ -104,11 +104,13 @@ public class Span {
     }
 
     // Finishing spans
-    // srv/response_payload_bytes comes after ServerSend so use that instead
-    if (Annotation.ClientRecv$.MODULE$.equals(annotation)
-        || (annotation instanceof Annotation.BinaryAnnotation
-            && "srv/response_payload_bytes"
-                .equals(((Annotation.BinaryAnnotation) annotation).key()))
+    // There's usually not always WireSend, BinaryAnnotation(jvm/gc_count),
+    // BinaryAnnotation(jvm/gc_ms), and BinaryAnnotation(srv/response_payload_bytes) AFTER
+    // ServerSend.
+    //
+    // However, its not always the case especially in error conditions.  End the span at ServerSend
+    if (Annotation.ServerSend$.MODULE$.equals(annotation)
+            && Annotation.ClientRecv$.MODULE$.equals(annotation)
         || (annotation instanceof Annotation.Message
             && TimeoutFilter.TimeoutAnnotation()
                 .equals(((Annotation.Message) annotation).content()))) {

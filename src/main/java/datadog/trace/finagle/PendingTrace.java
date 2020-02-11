@@ -15,7 +15,7 @@ import org.slf4j.LoggerFactory;
 
 public class PendingTrace {
   private static final Logger log = LoggerFactory.getLogger(PendingTrace.class);
-  private static final long TRACE_TIMEOUT = 30 * 1000;
+  private static final long TRACE_TIMEOUT = 15 * 1000;
 
   private final AtomicBoolean written = new AtomicBoolean(false);
   private final Map<SpanId, Span> spans = new HashMap<>();
