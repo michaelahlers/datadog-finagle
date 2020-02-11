@@ -53,7 +53,7 @@ public class Span {
   public Span(PendingTrace trace, BigInteger traceId, BigInteger parentId, BigInteger spanId) {
     this.traceId = traceId;
     this.parentId = parentId;
-    this.spanId = parentId;
+    this.spanId = spanId;
 
     this.trace = trace;
     this.serviceName = trace.getServiceName();
@@ -65,7 +65,7 @@ public class Span {
     }
 
     if (startTime == 0) {
-      startTime = record.timestamp().inMicroseconds();
+      startTime = record.timestamp().inNanoseconds();
     }
 
     Annotation annotation = record.annotation();
@@ -105,14 +105,19 @@ public class Span {
       }
     }
 
-    if (Annotation.ServerSend$.MODULE$.equals(annotation)
-        || Annotation.ClientRecv$.MODULE$.equals(annotation)
+    // Finishing spans
+    // srv/response_payload_bytes comes after ServerSend so use that instead
+    if (Annotation.ClientRecv$.MODULE$.equals(annotation)
+        || (annotation instanceof Annotation.BinaryAnnotation
+            && "srv/response_payload_bytes"
+                .equals(((Annotation.BinaryAnnotation) annotation).key()))
         || (annotation instanceof Annotation.Message
             && TimeoutFilter.TimeoutAnnotation()
                 .equals(((Annotation.Message) annotation).content()))) {
 
-      endTime = record.timestamp().inMicroseconds();
+      endTime = record.timestamp().inNanoseconds();
     }
+
     // TODO MS and MR Kind.Producer, Kind.Consumer
     /*
         if (Annotation.WireSend$.MODULE$.equals(annotation)) {
@@ -130,8 +135,6 @@ public class Span {
         } else if (annotation instanceof Annotation.Message) {
           String value = ((Annotation.Message) annotation).content();
           span.addAnnotation(record.timestamp(), value);
-        } else {
-          unhandledReceiver.counter0(annotation.getClass().getName()).incr();
         }
     */
   }
@@ -187,7 +190,6 @@ public class Span {
   public BigInteger getSpanId() {
     final BigInteger replacedId = trace.getRemappedSpanIds().get(spanId);
     if (replacedId != null) {
-      log.info("Found mapping {} - {}", spanId, replacedId);
       return replacedId;
     }
 
@@ -315,7 +317,9 @@ public class Span {
         tagMap.put("peer.ipv4", peerAddress.getAddress().getHostAddress());
       }
 
-      tagMap.put("peer.port", String.valueOf(peerAddress.getPort()));
+      if (kind == Kind.CLIENT) {
+        tagMap.put("peer.port", String.valueOf(peerAddress.getPort()));
+      }
       tagMap.put("peer.hostname", peerAddress.getHostName());
     }
   }

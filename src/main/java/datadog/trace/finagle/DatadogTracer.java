@@ -10,7 +10,6 @@ import java.io.Closeable;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -22,7 +21,13 @@ import scala.Option;
 public class DatadogTracer implements Tracer, Closeable {
   private static final Logger log = LoggerFactory.getLogger(DatadogTracer.class);
 
-  public static final long FLUSH_PERIOD = TimeUnit.SECONDS.toMillis(1);
+  private static final long FLUSH_PERIOD = TimeUnit.SECONDS.toMillis(1);
+  private static final int FLUSHED_TRACES_CACHE_SIZE = 500;
+
+  // Finagle sometimes sends records after a trace was completed.  This results in the new partial
+  // trace overriding the old data.  The cache keeps a list of ids that were already complete to
+  // ignore the late records
+  private final LRUCache<SpanId> flushedTraces = new LRUCache<>(FLUSHED_TRACES_CACHE_SIZE);
 
   private final Map<SpanId, PendingTrace> traces = new ConcurrentHashMap<>();
 
@@ -31,7 +36,6 @@ public class DatadogTracer implements Tracer, Closeable {
   private final String serviceName;
 
   public DatadogTracer() {
-    // Double configSampleRate = datadog.trace.api.Config.get().getTraceSamplingDefaultRate();
     this(Config.get().getServiceName(), Config.get().getAgentHost(), Config.get().getAgentPort());
   }
 
@@ -39,7 +43,7 @@ public class DatadogTracer implements Tracer, Closeable {
     executorService =
         Executors.newSingleThreadScheduledExecutor(
             r -> {
-              Thread thread = new Thread(r, "Tracer-Flush");
+              Thread thread = new Thread(r, "dd-tracer-flush");
               thread.setDaemon(true);
               return thread;
             });
@@ -48,18 +52,34 @@ public class DatadogTracer implements Tracer, Closeable {
 
     this.ddApi = new DDApi(agentHost, port);
     this.serviceName = serviceName;
+
+    // Double configSampleRate = datadog.trace.api.Config.get().getTraceSampleRate()
   }
 
   @Override
   public void record(Record record) {
-    log.info("Got record {}", record);
+    log.debug("Record {}", record);
     PendingTrace pendingTrace =
-        traces.computeIfAbsent(record.traceId().traceId(), (key) -> new PendingTrace(serviceName));
-    pendingTrace.addRecord(record);
+        traces.computeIfAbsent(
+            record.traceId().traceId(),
+            (key) -> {
+              if (!flushedTraces.contains(key)) {
+                log.debug("Starting new trace {}", key);
+                return new PendingTrace(serviceName);
+              } else {
+                log.debug("Received record for already reported trace {}", record);
+                return null;
+              }
+            });
 
-    if (pendingTrace.isComplete()) {
-      traces.remove(record.traceId().traceId());
-      ddApi.sendTrace(pendingTrace);
+    if (pendingTrace != null) {
+      pendingTrace.addRecord(record);
+
+      if (pendingTrace.isComplete()) {
+        flushedTraces.add(record.traceId().traceId());
+        traces.remove(record.traceId().traceId());
+        ddApi.sendTrace(pendingTrace);
+      }
     }
   }
 
@@ -82,6 +102,7 @@ public class DatadogTracer implements Tracer, Closeable {
   @Override
   public void close() {
     executorService.shutdownNow();
+    ddApi.close();
   }
 
   private void flush() {
@@ -90,6 +111,7 @@ public class DatadogTracer implements Tracer, Closeable {
     while (iterator.hasNext()) {
       final Map.Entry<SpanId, PendingTrace> next = iterator.next();
       if (next.getValue().isComplete()) {
+        flushedTraces.add(next.getKey());
         iterator.remove();
         ddApi.sendTrace(next.getValue());
       }
