@@ -41,7 +41,7 @@ public class Span {
   private final BigInteger spanId;
   private String type;
   private Kind kind;
-  private String serviceName;
+  private String assignedServiceName;
   private long startTime;
   private long endTime;
   private String name;
@@ -56,7 +56,6 @@ public class Span {
     this.spanId = spanId;
 
     this.trace = trace;
-    this.serviceName = trace.getServiceName();
   }
 
   public void addRecord(Record record) {
@@ -80,8 +79,7 @@ public class Span {
       name = ((Annotation.Rpc) annotation).name();
       type = DDSpanTypes.RPC;
     } else if (annotation instanceof Annotation.ServiceName) {
-      // FIXME is this logic correct? Its always overwriting
-      serviceName = ((Annotation.ServiceName) annotation).service();
+      assignedServiceName = ((Annotation.ServiceName) annotation).service();
     } else if (annotation instanceof Annotation.WireRecvError) {
       String error = ((Annotation.WireRecvError) annotation).error();
       tags.put(DDTags.ERROR_MSG, "Wire Receive Error: " + error);
@@ -178,7 +176,7 @@ public class Span {
       return "sql";
     }
 
-    return serviceName;
+    return trace.getServiceName();
   }
 
   @JsonGetter("trace_id")
@@ -298,11 +296,15 @@ public class Span {
     if (DDSpanTypes.HTTP_CLIENT.equals(getType()) || DDSpanTypes.HTTP_SERVER.equals(getType())) {
       tagMap.put("http.method", name);
     }
+
+    if (kind == Kind.CLIENT && assignedServiceName != null) {
+      tagMap.put("peer.service", assignedServiceName);
+    }
+
     return tagMap;
   }
 
   private void addNetworkTags(Map<String, String> tagMap) {
-    // TODO make sure this logic is correct
     InetSocketAddress peerAddress = null;
     if (kind == Kind.SERVER) {
       peerAddress = clientAddress;
