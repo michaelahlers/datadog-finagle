@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.datadoghq</groupId>
@@ -9,11 +10,28 @@
 
     <name>DD Finagle</name>
     <description>Datadog reporter for finagle</description>
+    <url>https://www.github.com/DataDog/datadog-finagle</url>
 
+    <licenses>
+        <license>
+            <name>The Apache Software License, Version 2.0</name>
+            <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <id>datadog</id>
+            <name>Datadog</name>
+        </developer>
+    </developers>
+    
     <scm>
         <connection>scm:git:git@github.com:DataDog/datadog-finagle.git</connection>
-      <tag>HEAD</tag>
-  </scm>
+        <developerConnection>scm:git:git@github.com:DataDog/datadog-finagle.git</developerConnection>
+        <url>https://www.github.com/DataDog/datadog-finagle</url>
+        <tag>HEAD</tag>
+    </scm>
 
     <distributionManagement>
         <repository>
