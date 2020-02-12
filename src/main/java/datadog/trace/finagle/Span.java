@@ -12,8 +12,10 @@ import datadog.trace.api.DDTags;
 import java.math.BigInteger;
 import java.net.Inet6Address;
 import java.net.InetSocketAddress;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.TreeSet;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -303,6 +305,8 @@ public class Span {
       tagMap.put("peer.service", assignedServiceName);
     }
 
+    addAnalyticsTags(tagMap);
+
     return tagMap;
   }
 
@@ -325,6 +329,20 @@ public class Span {
         tagMap.put("peer.port", String.valueOf(peerAddress.getPort()));
       }
       tagMap.put("peer.hostname", peerAddress.getHostName());
+    }
+  }
+
+  private void addAnalyticsTags(Map<String, String> tagMap) {
+    boolean defaultEnabled = kind == Kind.SERVER && Config.get().isTraceAnalyticsEnabled();
+
+    Config config = Config.get();
+    boolean traceAnalyticsEnabled =
+        config.isTraceAnalyticsIntegrationEnabled(
+            new TreeSet<>(Collections.singleton("finagle")), defaultEnabled);
+
+    if (traceAnalyticsEnabled) {
+      float traceAnalyticsSampleRate = config.getInstrumentationAnalyticsSampleRate("finagle");
+      tagMap.put(DDTags.ANALYTICS_SAMPLE_RATE, String.valueOf(traceAnalyticsSampleRate));
     }
   }
 
