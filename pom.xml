@@ -5,14 +5,14 @@
     <groupId>com.datadoghq</groupId>
     <artifactId>dd-finagle</artifactId>
     <packaging>jar</packaging>
-    <version>0.2.1</version>
+    <version>0.2.2-SNAPSHOT</version>
 
     <name>DD Finagle</name>
     <description>Datadog reporter for finagle</description>
 
     <scm>
         <connection>scm:git:git@github.com:DataDog/datadog-finagle.git</connection>
-      <tag>dd-finagle-0.2.1</tag>
+      <tag>HEAD</tag>
   </scm>
 
     <distributionManagement>
