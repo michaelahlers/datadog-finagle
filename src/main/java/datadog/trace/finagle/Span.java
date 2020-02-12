@@ -110,7 +110,7 @@ public class Span {
     //
     // However, its not always the case especially in error conditions.  End the span at ServerSend
     if (Annotation.ServerSend$.MODULE$.equals(annotation)
-            && Annotation.ClientRecv$.MODULE$.equals(annotation)
+        || Annotation.ClientRecv$.MODULE$.equals(annotation)
         || (annotation instanceof Annotation.Message
             && TimeoutFilter.TimeoutAnnotation()
                 .equals(((Annotation.Message) annotation).content()))) {
