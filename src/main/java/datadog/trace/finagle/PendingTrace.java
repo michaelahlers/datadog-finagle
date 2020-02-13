@@ -8,18 +8,16 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class PendingTrace {
   private static final Logger log = LoggerFactory.getLogger(PendingTrace.class);
-  private static final long TRACE_TIMEOUT = 15 * 1000;
+  private static final long TRACE_TIMEOUT = 45 * 1000;
 
   private final AtomicBoolean written = new AtomicBoolean(false);
   private final Map<SpanId, Span> spans = new HashMap<>();
-  private final Map<BigInteger, BigInteger> remappedSpanIds = new HashMap<>();
 
   private volatile boolean completed = false;
 
@@ -55,8 +53,6 @@ public class PendingTrace {
       span.addRecord(record);
 
       if (span.isComplete()) {
-        remapSpanIdIfNecessary(span);
-
         for (Span oldSpan : spans.values()) {
           if (!oldSpan.isComplete()) {
             completed = false;
@@ -67,18 +63,6 @@ public class PendingTrace {
         log.debug("Trace completed {}", record.traceId().traceId());
         completed = true;
       }
-    }
-  }
-
-  private void remapSpanIdIfNecessary(Span span) {
-    if (Span.Kind.SERVER == span.getKind() && !BigInteger.ZERO.equals(span.getParentId())) {
-
-      BigInteger newSpanId;
-      do {
-        newSpanId = new BigInteger(63, ThreadLocalRandom.current());
-      } while (newSpanId.signum() == 0);
-
-      remappedSpanIds.put(span.getSpanId(), newSpanId);
     }
   }
 
@@ -108,9 +92,5 @@ public class PendingTrace {
     synchronized (spans) {
       return new ArrayList<>(spans.values());
     }
-  }
-
-  public Map<BigInteger, BigInteger> getRemappedSpanIds() {
-    return remappedSpanIds;
   }
 }

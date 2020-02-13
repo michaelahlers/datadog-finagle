@@ -190,34 +190,11 @@ public class Span {
 
   @JsonGetter("span_id")
   public BigInteger getSpanId() {
-    final BigInteger replacedId = trace.getRemappedSpanIds().get(spanId);
-    if (replacedId != null) {
-      return replacedId;
-    }
-
     return spanId;
   }
 
   @JsonGetter("parent_id")
   public BigInteger getParentId() {
-    // Finagle sets span id equal to the parent when there is no parent
-    if (spanId.equals(parentId)) {
-      return BigInteger.ZERO;
-    }
-
-    // If the current span was remapped, the original span id is the parent
-    BigInteger replacedId = trace.getRemappedSpanIds().get(spanId);
-    if (replacedId != null) {
-      return spanId;
-    }
-
-    // If the parent span was remapped, use that instead
-    replacedId = trace.getRemappedSpanIds().get(parentId);
-    if (replacedId != null) {
-      return replacedId;
-    }
-
-    // Default case: no remapping
     return parentId;
   }
 

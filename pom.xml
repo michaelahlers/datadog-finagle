@@ -61,6 +61,12 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
+            <groupId>com.twitter</groupId>
+            <artifactId>finagle-base-http_2.12</artifactId>
+            <version>19.11.0</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
             <groupId>com.datadoghq</groupId>
             <artifactId>dd-trace-api</artifactId>
             <version>${ddtrace.version}</version>
