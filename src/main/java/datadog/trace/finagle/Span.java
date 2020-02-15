@@ -3,12 +3,15 @@ package datadog.trace.finagle;
 import com.fasterxml.jackson.annotation.JsonGetter;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.twitter.finagle.http.Status;
 import com.twitter.finagle.service.TimeoutFilter;
 import com.twitter.finagle.tracing.Annotation;
 import com.twitter.finagle.tracing.Record;
 import datadog.trace.api.Config;
 import datadog.trace.api.DDSpanTypes;
 import datadog.trace.api.DDTags;
+import java.io.PrintWriter;
+import java.io.StringWriter;
 import java.math.BigInteger;
 import java.net.Inet6Address;
 import java.net.InetSocketAddress;
@@ -102,6 +105,20 @@ public class Span {
       if (value instanceof Number || value instanceof Boolean || value instanceof String) {
         tags.put(
             convertTagName(((Annotation.BinaryAnnotation) annotation).key()), value.toString());
+      } else if (value instanceof Status) {
+        tags.put(
+            convertTagName(((Annotation.BinaryAnnotation) annotation).key()),
+            String.valueOf(((Status) value).code()));
+      } else if (value instanceof Throwable) {
+        Throwable t = (Throwable) value;
+        tags.put(
+            convertTagName(((Annotation.BinaryAnnotation) annotation).key()),
+            t.getClass().getName());
+        tags.put(DDTags.ERROR_MSG, t.getMessage());
+        tags.put(DDTags.ERROR_TYPE, t.getClass().getName());
+        final StringWriter errorString = new StringWriter();
+        t.printStackTrace(new PrintWriter(errorString));
+        tags.put(DDTags.ERROR_STACK, errorString.toString());
       }
     }
 
@@ -278,6 +295,8 @@ public class Span {
       tagMap.put("http.method", name);
     }
 
+    setHttpErrorStatus(tagMap);
+
     if (kind == Kind.CLIENT && assignedServiceName != null) {
       tagMap.put("peer.service", assignedServiceName);
     }
@@ -306,6 +325,21 @@ public class Span {
         tagMap.put("peer.port", String.valueOf(peerAddress.getPort()));
       }
       tagMap.put("peer.hostname", peerAddress.getHostName());
+    }
+  }
+
+  private void setHttpErrorStatus(Map<String, String> tagMap) {
+    String httpStatus = tagMap.get("http_status");
+    if (httpStatus == null) {
+      return;
+    }
+
+    if (kind == Kind.CLIENT
+        && Config.get().getHttpClientErrorStatuses().contains(Integer.valueOf(httpStatus))) {
+      tagMap.put(DDTags.ERROR_MSG, "HTTP error");
+    } else if (kind == Kind.SERVER
+        && Config.get().getHttpServerErrorStatuses().contains(Integer.valueOf(httpStatus))) {
+      tagMap.put(DDTags.ERROR_MSG, "HTTP error");
     }
   }
 
