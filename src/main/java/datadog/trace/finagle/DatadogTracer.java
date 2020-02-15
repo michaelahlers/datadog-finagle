@@ -7,6 +7,7 @@ import com.twitter.finagle.tracing.TraceId;
 import com.twitter.finagle.tracing.Tracer;
 import datadog.trace.api.Config;
 import java.io.Closeable;
+import java.math.BigInteger;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -27,7 +28,7 @@ public class DatadogTracer implements Tracer, Closeable {
   // Finagle sometimes sends records after a trace was completed.  This results in the new partial
   // trace overriding the old data.  The cache keeps a list of ids that were already complete to
   // ignore the late records
-  private final LRUCache<SpanId> flushedTraces = new LRUCache<>(FLUSHED_TRACES_CACHE_SIZE);
+  private final LRUCache<BigInteger> flushedSpans = new LRUCache<>(FLUSHED_TRACES_CACHE_SIZE);
 
   private final Map<SpanId, PendingTrace> traces = new ConcurrentHashMap<>();
 
@@ -63,11 +64,12 @@ public class DatadogTracer implements Tracer, Closeable {
         traces.computeIfAbsent(
             record.traceId().traceId(),
             (key) -> {
-              if (!flushedTraces.contains(key)) {
+              BigInteger spanId = new BigInteger(record.traceId().spanId().toString(), 16);
+              if (!flushedSpans.contains(spanId)) {
                 log.debug("Starting new trace {}", key);
                 return new PendingTrace(serviceName);
               } else {
-                log.debug("Received record for already reported trace {}", record);
+                log.debug("Received record for already reported span {}", record);
                 return null;
               }
             });
@@ -76,10 +78,16 @@ public class DatadogTracer implements Tracer, Closeable {
       pendingTrace.addRecord(record);
 
       if (pendingTrace.isComplete()) {
-        flushedTraces.add(record.traceId().traceId());
+        addSpansToFlushed(pendingTrace);
         traces.remove(record.traceId().traceId());
         ddApi.sendTrace(pendingTrace);
       }
+    }
+  }
+
+  private void addSpansToFlushed(PendingTrace pendingTrace) {
+    for (Span span : pendingTrace.getSpans()) {
+      flushedSpans.add(span.getSpanId());
     }
   }
 
@@ -111,7 +119,7 @@ public class DatadogTracer implements Tracer, Closeable {
     while (iterator.hasNext()) {
       final Map.Entry<SpanId, PendingTrace> next = iterator.next();
       if (next.getValue().isComplete()) {
-        flushedTraces.add(next.getKey());
+        addSpansToFlushed(next.getValue());
         iterator.remove();
         ddApi.sendTrace(next.getValue());
       }
