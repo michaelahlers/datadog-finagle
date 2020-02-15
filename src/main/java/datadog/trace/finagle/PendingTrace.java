@@ -48,7 +48,11 @@ public class PendingTrace {
                 BigInteger parentId = new BigInteger(record.traceId().parentId().toString(), 16);
                 BigInteger spanId = new BigInteger(record.traceId().spanId().toString(), 16);
 
-                return new Span(this, traceId, parentId, spanId);
+                if (parentId.equals(spanId)) {
+                  parentId = BigInteger.ZERO;
+                }
+
+                return new Span(this, traceId, parentId, spanId, spans.isEmpty());
               });
       span.addRecord(record);
 

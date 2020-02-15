@@ -39,11 +39,13 @@ public class Span {
   }
 
   private final Map<String, String> tags = new HashMap<>();
+  private Map<String, Number> metrics = new HashMap<>();
 
   private final PendingTrace trace;
   private final BigInteger traceId;
   private final BigInteger parentId;
   private final BigInteger spanId;
+  private final boolean localRoot;
   private String type;
   private Kind kind;
   private String assignedServiceName;
@@ -55,12 +57,19 @@ public class Span {
   private InetSocketAddress serverAddress;
   private InetSocketAddress messagingAddress;
 
-  public Span(PendingTrace trace, BigInteger traceId, BigInteger parentId, BigInteger spanId) {
+  public Span(
+      PendingTrace trace,
+      BigInteger traceId,
+      BigInteger parentId,
+      BigInteger spanId,
+      boolean localRoot) {
     this.traceId = traceId;
     this.parentId = parentId;
     this.spanId = spanId;
 
     this.trace = trace;
+
+    this.localRoot = localRoot;
   }
 
   public void addRecord(Record record) {
@@ -304,6 +313,19 @@ public class Span {
     addAnalyticsTags(tagMap);
 
     return tagMap;
+  }
+
+  @JsonGetter
+  public Map<String, Number> getMetrics() {
+    if (localRoot) {
+      metrics.put("_sampling_priority_v1", 1);
+    }
+
+    if (BigInteger.ZERO.equals(parentId)) {
+      metrics.put("_dd.agent_psr", 1);
+    }
+
+    return metrics;
   }
 
   private void addNetworkTags(Map<String, String> tagMap) {
