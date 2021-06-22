@@ -1,5 +1,7 @@
 # DataDog Finagle Reporter
 
+[![Release](https://jitpack.io/v/michaelahlers/datadog-finagle.svg)](https://jitpack.io/#michaelahlers/datadog-finagle)
+
 Reports Finagle traces to Datadog
 
 ## Installation
