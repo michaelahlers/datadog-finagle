@@ -1,5 +1,5 @@
-name := "dd-finagle"
-moduleName := "DD Finagle"
+name := "DD Finagle"
+moduleName := "dd-finagle"
 
 description := "Datadog reporter for Finagle."
 
@@ -8,7 +8,7 @@ organizationName := "Datadog"
 
 licenses += ("The Apache Software License, Version 2.0", url("http://www.apache.org/licenses/LICENSE-2.0.txt"))
 
-developers += Developer("datadog", "Datadog", "Datadog", url("http://github.com/michaelahlers"))
+developers += Developer("datadog", "Datadog", "info@datadoghq.com", url("http://github.com/michaelahlers"))
 
 scmInfo :=
   Some(ScmInfo(
