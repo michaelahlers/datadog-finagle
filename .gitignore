@@ -25,3 +25,5 @@ nbdist/
 .java-version
 release.properties
 *.releaseBackup
+
+.bsp
