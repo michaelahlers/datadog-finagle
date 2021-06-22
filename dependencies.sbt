@@ -1,5 +1,5 @@
-scalaVersion := "2.12.14"
-crossScalaVersions += "2.13.6"
+ThisBuild / scalaVersion := "2.12.14"
+ThisBuild / crossScalaVersions += "2.13.6"
 
 libraryDependencies ++=
   "com.datadoghq" % "dd-trace-api" % "0.42.0" ::
