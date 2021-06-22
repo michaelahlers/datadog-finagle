@@ -28,6 +28,8 @@ Logging is handled using the SLF4J api.  Set the log level of `datadog.trace.fin
 
 ## About this Fork
 
-The upstream project at [`DataDog/datadog-finagle`][github-datadog-datadog-finagle], built with Maven, [depends explicitly on Scala 2.12 binaries of Finagle](https://github.com/DataDog/datadog-finagle/blob/b083b7407ff4be13358817213f98574327a0f943/pom.xml#L57-L68) and elides that detail in its published artifacts (_i.e._, Scala's version suffix isn't preserved). In practice, this raises compatibility issues with projects wishing to use the library with Scala 2.13 or newer. This fork was borne of the need for artifacts supporting multiple Scala minor versions (_e.g._, 2.12, 2.13) and newer versions of Finagle and Finatra. 
+The upstream project at [`DataDog/datadog-finagle`][github-datadog-datadog-finagle], built with Maven, [depends explicitly on Scala 2.12 binaries of Finagle](https://github.com/DataDog/datadog-finagle/blob/b083b7407ff4be13358817213f98574327a0f943/pom.xml#L57-L68) and elides that detail in its published artifacts (_i.e._, Scala's version suffix isn't preserved). In practice, this raises compatibility issues with projects wishing to use the library with Scala 2.13 or newer.
+
+This fork was borne of the need for artifacts supporting multiple Scala minor versions (_e.g._, 2.12, 2.13) and newer versions of Finagle and Finatra. That's accomplished by revising this project to build with SBT, and—while doing so—introduce a few additional conveniences. Eventually, this fork will seek to support multiple major-minor versions of Finagle. 
 
 [github-datadog-datadog-finagle]: https://github.com/DataDog/datadog-finagle
