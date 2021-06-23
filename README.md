@@ -8,7 +8,7 @@ Add these settings:
 
 ```
 resolvers += "JitPack".at("https://jitpack.io")
-libraryDependencies += "com.github.michaelahlers" %% "datadog-finagle" % "{version}"
+libraryDependencies += "com.github.michaelahlers" %% "datadog-finagle_21.6" % "{version}"
 ```
 
 Finagle will autodetect the tracer.
