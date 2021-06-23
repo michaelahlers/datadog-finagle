@@ -6,6 +6,7 @@ import com.twitter.finagle.Stack;
 import com.twitter.finagle.http.HttpTracing.Header$;
 import com.twitter.finagle.http.Request;
 import com.twitter.finagle.http.TraceInfo;
+import com.twitter.finagle.http.TraceInfoCompat;
 import com.twitter.finagle.param.Tracer;
 import com.twitter.finagle.tracing.Flags;
 import com.twitter.finagle.tracing.SpanId;
@@ -94,11 +95,13 @@ public class ServerTraceInitializer<Req extends Request, Rep>
           traceId,
           false,
           () -> {
-            TraceInfo.traceRpc(request);
+            //TraceInfo.traceRpc(request);
+            TraceInfoCompat.traceRpc(request);
             return f.get();
           });
     } else {
-      TraceInfo.traceRpc(request);
+      //TraceInfo.traceRpc(request);
+      TraceInfoCompat.traceRpc(request);
       return f.get();
     }
   }
