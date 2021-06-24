@@ -27,3 +27,4 @@ release.properties
 *.releaseBackup
 
 .bsp
+.env
