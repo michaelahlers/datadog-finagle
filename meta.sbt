@@ -1,5 +1,5 @@
 name := "DD Finagle"
-moduleName := "dd-finagle_21.6"
+moduleName := "dd-finagle"
 
 description := "Datadog reporter for Finagle."
 
