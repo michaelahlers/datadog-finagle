@@ -1,2 +1,2 @@
-githubOwner := "michaelahlers"
-githubRepository := "datadog-finagle"
+//githubOwner := "michaelahlers"
+//githubRepository := "datadog-finagle"
